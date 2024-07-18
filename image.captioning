@@ -1,0 +1,55 @@
+import torch
+import torchvision.transforms as transforms
+from PIL import Image
+from torchvision import models
+import nltk
+from transformers import GPT2Tokenizer, GPT2LMHeadModel
+
+# Download the required NLTK data
+nltk.download('punkt')
+
+# Load pre-trained model for feature extraction
+resnet = models.resnet50(pretrained=True)
+resnet = torch.nn.Sequential(*(list(resnet.children())[:-1]))
+resnet.eval()
+
+# Preprocess the image
+def preprocess_image(image_path):
+    transform = transforms.Compose([
+        transforms.Resize((224, 224)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    ])
+    image = Image.open(image_path)
+    image = transform(image).unsqueeze(0)
+    return image
+
+# Extract features from the image
+def extract_features(image_path):
+    image = preprocess_image(image_path)
+    with torch.no_grad():
+        features = resnet(image).squeeze()
+    return features
+
+# Load pre-trained language model for caption generation
+tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
+model = GPT2LMHeadModel.from_pretrained('gpt2')
+
+# Generate caption
+def generate_caption(image_features):
+    tokens = tokenizer.encode("Image: ", return_tensors='pt')
+    tokens = torch.cat((tokens, image_features.unsqueeze(0)), dim=1)
+    with torch.no_grad():
+        output = model.generate(tokens, max_length=20, num_beams=5, early_stopping=True)
+    caption = tokenizer.decode(output[0], skip_special_tokens=True)
+    return caption
+
+# Main function to caption an image
+def caption_image(image_path):
+    features = extract_features(image_path)
+    caption = generate_caption(features)
+    print("Caption:", caption)
+
+# Example usage
+image_path = 'path_to_your_image.jpg'
+caption_image(image_path)
